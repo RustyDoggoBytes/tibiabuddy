@@ -1,0 +1,93 @@
+package main
+
+import (
+"strings"
+"time"
+)
+
+templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css" />
+	<script src="https://unpkg.com/htmx.org@1.9.9"
+		integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX"
+		crossorigin="anonymous"></script>
+	<title>Tibia Buddy</title>
+</head>
+
+<body hx-boost="true">
+	<main class="container">
+		<h1>Former Name</h1>
+		<form method="post" action="/former-name/search" hx-push-url="false">
+			<input type="search" name="former-name" role="search" />
+			<button type="submit">Search</button>
+		</form>
+		if searchCharacter != nil {
+		if searchCharacter.Error != nil {
+		<article>
+			<p>{ *searchCharacter.Error }</p>
+		</article>
+		} else {
+		<article>
+			<h3>{ searchCharacter.NameInput }</h3>
+			<table>
+				<tr>
+					<td>Name</td>
+					<td>{ searchCharacter.Name }</td>
+				</tr>
+				<tr>
+					<td>Former Names</td>
+					<td>{ strings.Join(searchCharacter.FormerNames, ", ") }</td>
+				</tr>
+				<tr>
+					<td>World</td>
+					<td>{ searchCharacter.World }</td>
+				</tr>
+			</table>
+			<footer>
+				if !searchCharacter.Trackable {
+				<p>
+					<strong>{ searchCharacter.NameInput }</strong> is not trackable as it is not set
+					to
+					expire.
+				</p>
+				} else {
+				<form>
+					<label for="notification-email">
+						Notification Email
+						<input type="email" name="notification-email" />
+					</label>
+					<button type="submit">Start Tracking</button>
+				</form>
+				}
+			</footer>
+		</article>
+		}
+		}
+		<table role="grid">
+			<thead>
+				<tr>
+					<td>Name</td>
+					<td>Notification Email</td>
+					<td>Last Checked</td>
+					<td></td>
+				</tr>
+			</thead>
+			for _, followingName := range(followingNames) {
+			<tr>
+				<td>{ followingName.Name }</td>
+				<td>{ followingName.NotificationEmail }</td>
+				<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
+				<td><a href="#" hx-delete="/former-name/remove" role="button">Remove</a></td>
+			</tr>
+			}
+		</table>
+	</main>
+</body>
+
+</html>
+}
