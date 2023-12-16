@@ -15,6 +15,7 @@ type FormerName struct {
 	Name string
 	NotificationEmail string
 	LastChecked time.Time
+	IsAvailable bool
 }
 
 type CharacterSearch struct{
@@ -29,7 +30,6 @@ type CharacterSearch struct{
 type TibiaDataApi struct {
 	Url string
 }
-
 
 type TibiaApiResponse struct {
 	Information interface{} `json:"information"`
@@ -82,8 +82,8 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 
 
 var formerNames = []FormerName {
-	{Name: "Mario", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now()},
-	{Name: "Legolas", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now() },
+	{Name: "Mario", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), IsAvailable: true},
+	{Name: "Luigi", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now() },
 }
 
 
