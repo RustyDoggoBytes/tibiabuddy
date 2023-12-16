@@ -30,12 +30,10 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 			<button type="submit">Search</button>
 		</form>
 		if searchCharacter != nil {
-		if searchCharacter.Error != nil {
 		<article>
+			if searchCharacter.Error != nil {
 			<p>{ searchCharacter.Error.Error() }</p>
-		</article>
-		} else {
-		<article>
+			} else {
 			<h3>{ searchCharacter.NameInput }</h3>
 			<table>
 				<tr>
@@ -69,8 +67,8 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 				</form>
 				}
 			</footer>
+			}
 		</article>
-		}
 		}
 		<table role="grid">
 			<thead>

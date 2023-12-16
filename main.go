@@ -19,6 +19,7 @@ type FormerName struct {
 }
 
 type CharacterSearch struct{
+	Found bool
 	FormerNames []string
 	NameInput string
 	Name string
@@ -32,8 +33,18 @@ type TibiaDataApi struct {
 }
 
 type TibiaApiResponse struct {
-	Information interface{} `json:"information"`
+	Information TibiaApiInformation `json:"information"`
 }
+
+type TibiaApiInformation struct {
+	Status TibiaApiStatus `json:"status"`
+}
+
+type TibiaApiStatus struct {
+	HttpCode int `json:"http_code"`
+	ErrorCode int `json:"error"`
+}	
+
 
 type CharacterResponse struct {
 	TibiaApiResponse
@@ -58,8 +69,14 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 
 	var j CharacterResponse
 	err = json.NewDecoder(resp.Body).Decode(&j)
+
 	if err != nil {
 		return nil, err
+	}
+	
+	found := true
+	if j.Information.Status.ErrorCode == 20001 {
+		found = false
 	}
 
 	trackable := false
@@ -72,6 +89,7 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 	}
 
 	return &CharacterSearch{
+		Found: found, 
 		NameInput: name,
 		Name: j.Character.Character.Name,
 		FormerNames: j.Character.Character.FormerNames,
@@ -97,9 +115,11 @@ func main() {
 		searchCharacter, err := t.SearchCharacter(formerName)
 
 		if err != nil {
-			e.Logger.Error("failed to search for character", err)
-			errorMsg := errors.New("Fail to search. Try again")
-			searchCharacter = &CharacterSearch{Error: errorMsg}
+			errorMsg := "Search failed. Try again."
+			searchCharacter = &CharacterSearch{Error: errors.New(errorMsg)}
+		}
+		if !searchCharacter.Found {
+			searchCharacter = &CharacterSearch{Error: errors.New(fmt.Sprintf("Character Not Found - %s", formerName))}
 		}
 
 		component := index(formerNames, searchCharacter, nil)
