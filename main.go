@@ -11,11 +11,32 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+type FormerNameStatus int
+
+const (
+	available FormerNameStatus = iota
+	unavailable
+	expiring
+)
+
+func (e FormerNameStatus) String() string {
+	switch e {
+	case available:
+	return "available"
+	case unavailable:
+	return "unavailable"
+	case expiring:
+	return "expiring"
+	default:
+	return "unknown"
+	}
+}
+
 type FormerName struct {
 	Name string
 	NotificationEmail string
 	LastChecked time.Time
-	IsAvailable bool
+	Status FormerNameStatus
 }
 
 type CharacterSearch struct{
@@ -100,15 +121,51 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 
 
 var formerNames = []FormerName {
-	{Name: "Mario", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), IsAvailable: true},
-	{Name: "Luigi", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now() },
+	{Name: "Mario", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: expiring},
+	{Name: "Djow tattoo", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: expiring},
+	{Name: "Luigi", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: available },
+	{Name: "Peach", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: unavailable },
 }
 
+
+func runBackground(t *TibiaDataApi) {
+			fmt.Println("running background")
+	newArray := []FormerName{}
+	for _, name := range(formerNames) {
+		if name.Status != expiring  {
+			newArray = append(newArray, name)
+			continue
+		}
+			fmt.Println("checking name", name.Name)
+		char, err := t.SearchCharacter(name.Name)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if !char.Found {
+			fmt.Println(name.Name, "is available")
+			name.Status = available
+		}
+
+		if strings.ToLower(char.Name) == strings.ToLower(name.Name) {
+			fmt.Println(name.Name, "is taken")
+			name.Status = unavailable
+		}
+		name.LastChecked = time.Now()
+		newArray = append(newArray, name)
+		time.Sleep(1 * time.Second)
+	}
+	formerNames = newArray
+	time.Sleep(5 * time.Minute)
+}
 
 func main() {
 	t := TibiaDataApi{
 		Url: "https://api.tibiadata.com",
 	}
+
+	go runBackground(&t)
+
 	e := echo.New()
 	e.POST("/former-name/search", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
