@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
+templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err error) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -17,6 +17,9 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
 		</head>
 		<body hx-boost="true">
 			<main class="container">
+				if err != nil {
+					<p style="color: red;">{ err.Error() }</p>
+				}
 				<h1>Former Name</h1>
 				<form method="post" action="/former-name/search" hx-push-url="false">
 					<input type="search" name="former-name" role="search" placeholder="Search for former name"/>
@@ -25,7 +28,7 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
 				if searchCharacter != nil {
 					if searchCharacter.Error != nil {
 						<article>
-							<p>{ *searchCharacter.Error }</p>
+							<p>{ searchCharacter.Error.Error() }</p>
 						</article>
 					} else {
 						<article>
@@ -52,7 +55,8 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
 										expire.
 									</p>
 								} else {
-									<form>
+									<form method="post" action="/former-names">
+										<input type="hidden" name="former-name" value={ searchCharacter.NameInput }/>
 										<label for="notification-email">
 											Notification Email
 											<input type="email" name="notification-email"/>
@@ -78,7 +82,14 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch) {
 							<td>{ followingName.Name }</td>
 							<td>{ followingName.NotificationEmail }</td>
 							<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
-							<td><a href="#" hx-delete="/former-name/remove" role="button">Remove</a></td>
+							<td>
+								<a
+ 									href="#"
+ 									role="button"
+ 									hx-delete={ templ.EscapeString("/former-names/" + followingName.Name) }
+ 									hx-target="body"
+								>Remove</a>
+							</td>
 						</tr>
 					}
 				</table>

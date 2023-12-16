@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -21,7 +23,7 @@ type CharacterSearch struct{
 	Name string
 	World string
 	Trackable bool
-	Error *string
+	Error error 
 }
 
 type TibiaDataApi struct {
@@ -84,6 +86,7 @@ var formerNames = []FormerName {
 	{Name: "Legolas", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now() },
 }
 
+
 func main() {
 	t := TibiaDataApi{
 		Url: "https://api.tibiadata.com",
@@ -93,23 +96,53 @@ func main() {
 		formerName := c.FormValue("former-name")
 		searchCharacter, err := t.SearchCharacter(formerName)
 
-		if err != nil{
+		if err != nil {
 			e.Logger.Error("failed to search for character", err)
-			errorMsg := "Fail to search. Try again"
-			searchCharacter = &CharacterSearch{Error: &errorMsg}
+			errorMsg := errors.New("Fail to search. Try again")
+			searchCharacter = &CharacterSearch{Error: errorMsg}
 		}
 
-		component := index(formerNames, searchCharacter)
+		component := index(formerNames, searchCharacter, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
 	e.GET("/", func(c echo.Context) error {
-		component := index(formerNames, nil)
-
-
-
-
+		component := index(formerNames, nil, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
+
+	e.DELETE("/former-names/:name", func (c echo.Context) error {
+		formerName := c.Param("name")
+
+		removeIdx := -1
+		for idx, name := range(formerNames) {
+			if name.Name == formerName {
+				removeIdx = idx
+				println(formerName, removeIdx)
+				break 
+			}
+		}
+
+
+		var err error
+		if removeIdx == -1 {
+			err = errors.New(fmt.Sprintf("Former Name %s not found", formerName))
+		}
+
+		formerNames = append(formerNames[:removeIdx], formerNames[removeIdx+1:]...)
+		component := index(formerNames, nil, err)
+		return component.Render(c.Request().Context(), c.Response())
+		})
+
+	e.POST("/former-names", func (c echo.Context) error {
+		formerName := c.FormValue("former-name")
+		notificationEmail := c.FormValue("notification-email")
+
+
+		formerNames = append(formerNames, FormerName{Name: formerName, NotificationEmail: notificationEmail, LastChecked: time.Now()})
+		component := index(formerNames, nil, nil)
+		return component.Render(c.Request().Context(), c.Response())
+		})
+
 	e.Logger.Fatal(e.Start("127.0.0.1:1323"))
 }
