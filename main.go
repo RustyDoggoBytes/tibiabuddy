@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 type FormerNameStatus int
@@ -22,31 +24,31 @@ const (
 func (e FormerNameStatus) String() string {
 	switch e {
 	case available:
-	return "available"
+		return "available"
 	case unavailable:
-	return "unavailable"
+		return "unavailable"
 	case expiring:
-	return "expiring"
+		return "expiring"
 	default:
-	return "unknown"
+		return "unknown"
 	}
 }
 
 type FormerName struct {
-	Name string
+	Name              string
 	NotificationEmail string
-	LastChecked time.Time
-	Status FormerNameStatus
+	LastChecked       time.Time
+	Status            FormerNameStatus
 }
 
-type CharacterSearch struct{
-	Found bool
+type CharacterSearch struct {
+	Found       bool
 	FormerNames []string
-	NameInput string
-	Name string
-	World string
-	Trackable bool
-	Error error 
+	NameInput   string
+	Name        string
+	World       string
+	Trackable   bool
+	Error       error
 }
 
 type TibiaDataApi struct {
@@ -62,10 +64,9 @@ type TibiaApiInformation struct {
 }
 
 type TibiaApiStatus struct {
-	HttpCode int `json:"http_code"`
+	HttpCode  int `json:"http_code"`
 	ErrorCode int `json:"error"`
-}	
-
+}
 
 type CharacterResponse struct {
 	TibiaApiResponse
@@ -76,8 +77,8 @@ type CharacterWrapper struct {
 }
 
 type Character struct {
-	Name string `json:"name"`
-	World string `json:"world"`
+	Name        string   `json:"name"`
+	World       string   `json:"world"`
 	FormerNames []string `json:"former_names"`
 }
 
@@ -94,7 +95,7 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	found := true
 	if j.Information.Status.ErrorCode == 20001 {
 		found = false
@@ -102,7 +103,7 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 
 	trackable := false
 	formerNames := j.Character.Character.FormerNames
-	for _, formerName := range(formerNames) {
+	for _, formerName := range formerNames {
 		if strings.ToLower(formerName) == strings.ToLower(name) {
 			trackable = true
 			break
@@ -110,33 +111,28 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 	}
 
 	return &CharacterSearch{
-		Found: found, 
-		NameInput: name,
-		Name: j.Character.Character.Name,
+		Found:       found,
+		NameInput:   name,
+		Name:        j.Character.Character.Name,
 		FormerNames: j.Character.Character.FormerNames,
-		World: j.Character.Character.World,
-		Trackable: trackable,
+		World:       j.Character.Character.World,
+		Trackable:   trackable,
 	}, nil
 }
 
-
-var formerNames = []FormerName {
-	{Name: "Mario", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: expiring},
+var formerNames = []FormerName{
 	{Name: "Djow tattoo", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: expiring},
-	{Name: "Luigi", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: available },
-	{Name: "Peach", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: unavailable },
 }
 
-
 func runBackground(t *TibiaDataApi) {
-			fmt.Println("running background")
+	fmt.Println("running background")
 	newArray := []FormerName{}
-	for _, name := range(formerNames) {
-		if name.Status != expiring  {
+	for _, name := range formerNames {
+		if name.Status != expiring {
 			newArray = append(newArray, name)
 			continue
 		}
-			fmt.Println("checking name", name.Name)
+		fmt.Println("checking name", name.Name)
 		char, err := t.SearchCharacter(name.Name)
 		if err != nil {
 			fmt.Println(err)
@@ -167,6 +163,14 @@ func main() {
 	go runBackground(&t)
 
 	e := echo.New()
+	e.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
+		// Be careful to use constant time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(username), []byte("rusty")) == 1 &&
+			subtle.ConstantTimeCompare([]byte(password), []byte("$umm3R")) == 1 {
+			return true, nil
+		}
+		return false, nil
+	}))
 	e.POST("/former-name/search", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
 		searchCharacter, err := t.SearchCharacter(formerName)
@@ -188,18 +192,17 @@ func main() {
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	e.DELETE("/former-names/:name", func (c echo.Context) error {
+	e.DELETE("/former-names/:name", func(c echo.Context) error {
 		formerName := c.Param("name")
 
 		removeIdx := -1
-		for idx, name := range(formerNames) {
+		for idx, name := range formerNames {
 			if name.Name == formerName {
 				removeIdx = idx
 				println(formerName, removeIdx)
-				break 
+				break
 			}
 		}
-
 
 		var err error
 		if removeIdx == -1 {
@@ -209,17 +212,27 @@ func main() {
 		formerNames = append(formerNames[:removeIdx], formerNames[removeIdx+1:]...)
 		component := index(formerNames, nil, err)
 		return component.Render(c.Request().Context(), c.Response())
-		})
+	})
 
-	e.POST("/former-names", func (c echo.Context) error {
+	e.POST("/former-names", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
 		notificationEmail := c.FormValue("notification-email")
-
 
 		formerNames = append(formerNames, FormerName{Name: formerName, NotificationEmail: notificationEmail, LastChecked: time.Now()})
 		component := index(formerNames, nil, nil)
 		return component.Render(c.Request().Context(), c.Response())
-		})
+	})
+
+	e.POST("/send-email", func(c echo.Context) error {
+		emails := strings.Split(c.FormValue("emails"), ",")
+		formerName := c.FormValue("name")
+
+		emailClient := EmailClient("rustydoggobytes@gmail.com", "fkqa dugm wjgs brpa")
+		emailClient.NotifyUserFormerNameIsAvailable(emails, formerName)
+
+		component := index(formerNames, nil, nil)
+		return component.Render(c.Request().Context(), c.Response())
+	})
 
 	e.Logger.Fatal(e.Start("127.0.0.1:1323"))
 }
