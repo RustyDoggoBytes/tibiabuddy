@@ -17,8 +17,9 @@ type FormerNameStatus int
 
 const (
 	available FormerNameStatus = iota
-	unavailable
 	expiring
+	unavailable
+	unknown
 )
 
 func (e FormerNameStatus) String() string {
@@ -39,6 +40,7 @@ type FormerName struct {
 	NotificationEmail string
 	LastChecked       time.Time
 	Status            FormerNameStatus
+	KnownExpiringDate *time.Time
 }
 
 type CharacterSearch struct {
@@ -121,38 +123,58 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 }
 
 var formerNames = []FormerName{
-	{Name: "Djow tattoo", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: expiring},
+	{Name: "Djow tattoo", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: available},
+}
+
+func getNewStatus(name string, c *CharacterSearch) FormerNameStatus {
+	if !c.Found {
+		return available
+	}
+
+	if strings.ToLower(c.Name) == strings.ToLower(name) {
+		return unavailable
+	}
+
+	for _, charFormerName := range c.FormerNames {
+		if strings.ToLower(charFormerName) == strings.ToLower(name) {
+			return expiring
+		}
+	}
+	fmt.Println("not sure what is happening", c)
+
+	return unknown
 }
 
 func runBackground(t *TibiaDataApi) {
 	fmt.Println("running background")
-	newArray := []FormerName{}
-	for _, name := range formerNames {
-		if name.Status != expiring {
+	for {
+		newArray := []FormerName{}
+		for _, name := range formerNames {
+			fmt.Println("checking name", name.Name)
+			char, err := t.SearchCharacter(name.Name)
+			if err != nil {
+				fmt.Println(err)
+				time.Sleep(1 * time.Second)
+				continue;
+			}
+
+			oldStatus := name.Status
+			newStatus := getNewStatus(name.Name, char)
+			fmt.Printf("checked name %s old_status=%s new_status=%s\n", name.Name, oldStatus, newStatus)
+			if oldStatus != expiring && newStatus == expiring {
+				now := time.Now()
+				name.KnownExpiringDate = &now
+			}
+
+			name.Status = newStatus
+			name.LastChecked = time.Now()
 			newArray = append(newArray, name)
-			continue
-		}
-		fmt.Println("checking name", name.Name)
-		char, err := t.SearchCharacter(name.Name)
-		if err != nil {
-			fmt.Println(err)
+			time.Sleep(1 * time.Second)
 		}
 
-		if !char.Found {
-			fmt.Println(name.Name, "is available")
-			name.Status = available
-		}
-
-		if strings.ToLower(char.Name) == strings.ToLower(name.Name) {
-			fmt.Println(name.Name, "is taken")
-			name.Status = unavailable
-		}
-		name.LastChecked = time.Now()
-		newArray = append(newArray, name)
-		time.Sleep(1 * time.Second)
+		formerNames = newArray
+		time.Sleep(5 * time.Minute)
 	}
-	formerNames = newArray
-	time.Sleep(5 * time.Minute)
 }
 
 func main() {
@@ -234,5 +256,5 @@ func main() {
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	e.Logger.Fatal(e.Start("127.0.0.1:1323"))
+	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
 }

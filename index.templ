@@ -76,6 +76,7 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 					<td>Name</td>
 					<td>Notification Email</td>
 					<td>Last Checked</td>
+					<td>Known Expire Date</td>
 					<td>Status</td>
 					<td></td>
 				</tr>
@@ -85,6 +86,11 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 				<td>{ followingName.Name }</td>
 				<td>{ followingName.NotificationEmail }</td>
 				<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
+				if followingName.KnownExpiringDate != nil {
+				<td>{ followingName.KnownExpiringDate.Format(time.RFC3339) } </td>
+				} else {
+				<td></td>
+				}
 				<td>
 					{ followingName.Status.String() }
 				</td>
@@ -97,7 +103,7 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 		</table>
 		<details>
 			<summary>Email Test</summary>
-			<form method="post" action="/send-email">
+			<form method="post" action="/send-email" hx-push-url="false">
 				<input type="text" name="emails" placeholder="email1@gmail.com,email2@gmail.com" />
 				<input type="text" name="name" placeholder="Aragorn" />
 				<button type="submit">Send Test Email</button>
