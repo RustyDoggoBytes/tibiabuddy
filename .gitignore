@@ -26,4 +26,4 @@ tmp/
 .vscode/
 *_templ.go
 *.db
-tibiabuddy
+tibiabuddy*
