@@ -20,7 +20,7 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 </head>
 
 <body hx-boost="true">
-	<main class="container">
+	<main class="container" hx-trigger="every 10s" hx-get="/">
 		if err != nil {
 		<p style="color: red;">{ err.Error() }</p>
 		}
@@ -50,13 +50,6 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 				</tr>
 			</table>
 			<footer>
-				if !searchCharacter.Trackable {
-				<p>
-					<strong>{ searchCharacter.NameInput }</strong> is not trackable as it is not set
-					to
-					expire.
-				</p>
-				} else {
 				<form method="post" action="/former-names" hx-push-url="false">
 					<input type="hidden" name="former-name" value={ searchCharacter.NameInput } />
 					<label for="notification-email">
@@ -65,7 +58,6 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 					</label>
 					<button type="submit">Start Tracking</button>
 				</form>
-				}
 			</footer>
 			}
 		</article>
@@ -76,7 +68,7 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 					<td>Name</td>
 					<td>Notification Email</td>
 					<td>Last Checked</td>
-					<td>Known Expire Date</td>
+					<td>Last Updated Status</td>
 					<td>Status</td>
 					<td></td>
 				</tr>
@@ -86,8 +78,8 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 				<td>{ followingName.Name }</td>
 				<td>{ followingName.NotificationEmail }</td>
 				<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
-				if followingName.KnownExpiringDate != nil {
-				<td>{ followingName.KnownExpiringDate.Format(time.RFC3339) } </td>
+				if followingName.LastUpdatedStatus != nil {
+				<td>{ followingName.LastUpdatedStatus.Format(time.RFC3339) } </td>
 				} else {
 				<td></td>
 				}

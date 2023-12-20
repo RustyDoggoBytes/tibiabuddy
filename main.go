@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 type FormerNameStatus int
@@ -35,12 +36,25 @@ func (e FormerNameStatus) String() string {
 	}
 }
 
+func (e FormerNameStatus) FromString(s string) FormerNameStatus {
+	switch s {
+	case "available":
+		return available
+	case "unavailable":
+		return unavailable
+	case "expiring":
+		return expiring
+	default:
+		return unknown
+	}
+}
+
 type FormerName struct {
 	Name              string
 	NotificationEmail string
 	LastChecked       time.Time
+	LastUpdatedStatus *time.Time
 	Status            FormerNameStatus
-	KnownExpiringDate *time.Time
 }
 
 type CharacterSearch struct {
@@ -122,10 +136,6 @@ func (t *TibiaDataApi) SearchCharacter(name string) (*CharacterSearch, error) {
 	}, nil
 }
 
-var formerNames = []FormerName{
-	{Name: "Djow tattoo", NotificationEmail: "rustydoggobytes@gmail.com", LastChecked: time.Now(), Status: available},
-}
-
 func getNewStatus(name string, c *CharacterSearch) FormerNameStatus {
 	if !c.Found {
 		return available
@@ -145,46 +155,62 @@ func getNewStatus(name string, c *CharacterSearch) FormerNameStatus {
 	return unknown
 }
 
-func runBackground(t *TibiaDataApi) {
+func runBackground(db *repositoryClient, t *TibiaDataApi) {
 	fmt.Println("running background")
 	for {
-		newArray := []FormerName{}
+		fmt.Println("started...")
+		formerNames, err := db.GetFormerNames()
+		if err != nil {
+			panic(err)
+
+		}
 		for _, name := range formerNames {
 			fmt.Println("checking name", name.Name)
 			char, err := t.SearchCharacter(name.Name)
 			if err != nil {
 				fmt.Println(err)
 				time.Sleep(1 * time.Second)
-				continue;
+				continue
 			}
 
 			oldStatus := name.Status
 			newStatus := getNewStatus(name.Name, char)
 			fmt.Printf("checked name %s old_status=%s new_status=%s\n", name.Name, oldStatus, newStatus)
-			if oldStatus != expiring && newStatus == expiring {
+			if oldStatus != newStatus {
 				now := time.Now()
-				name.KnownExpiringDate = &now
+				name.LastUpdatedStatus = &now
 			}
 
 			name.Status = newStatus
 			name.LastChecked = time.Now()
-			newArray = append(newArray, name)
+
+			db.SaveFormerName(name)
 			time.Sleep(1 * time.Second)
 		}
 
-		formerNames = newArray
 		time.Sleep(5 * time.Minute)
 	}
 }
 
 func main() {
+	ssl := ""
+
 	t := TibiaDataApi{
 		Url: "https://api.tibiadata.com",
 	}
 
-	go runBackground(&t)
+	emailClient := EmailClient("rustydoggobytes@gmail.com", "fkqa dugm wjgs brpa")
+	db, err := RepositoryClient("tibiabuddy.db")
+
+	if err != nil {
+		panic(err)
+	}
+
+	go runBackground(db, &t)
 
 	e := echo.New()
+	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist("tibiabuddy.rustydoggobytes.com")
+	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
 	e.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
 		// Be careful to use constant time comparison to prevent timing attacks
 		if subtle.ConstantTimeCompare([]byte(username), []byte("rusty")) == 1 &&
@@ -193,6 +219,7 @@ func main() {
 		}
 		return false, nil
 	}))
+
 	e.POST("/former-name/search", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
 		searchCharacter, err := t.SearchCharacter(formerName)
@@ -205,33 +232,28 @@ func main() {
 			searchCharacter = &CharacterSearch{Error: errors.New(fmt.Sprintf("Character Not Found - %s", formerName))}
 		}
 
+		formerNames, _ := db.GetFormerNames()
 		component := index(formerNames, searchCharacter, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
 	e.GET("/", func(c echo.Context) error {
+		formerNames, _ := db.GetFormerNames()
 		component := index(formerNames, nil, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
 	e.DELETE("/former-names/:name", func(c echo.Context) error {
 		formerName := c.Param("name")
+		err := db.DeleteFormerName(formerName)
 
-		removeIdx := -1
-		for idx, name := range formerNames {
-			if name.Name == formerName {
-				removeIdx = idx
-				println(formerName, removeIdx)
-				break
+		if err != nil {
+			if err.Error() == "not found" {
+				err = errors.New(fmt.Sprintf("Former Name %s not found", formerName))
 			}
 		}
 
-		var err error
-		if removeIdx == -1 {
-			err = errors.New(fmt.Sprintf("Former Name %s not found", formerName))
-		}
-
-		formerNames = append(formerNames[:removeIdx], formerNames[removeIdx+1:]...)
+		formerNames, _ := db.GetFormerNames()
 		component := index(formerNames, nil, err)
 		return component.Render(c.Request().Context(), c.Response())
 	})
@@ -239,8 +261,13 @@ func main() {
 	e.POST("/former-names", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
 		notificationEmail := c.FormValue("notification-email")
+		var status FormerNameStatus
+		status = status.FromString(c.FormValue("status"))
 
-		formerNames = append(formerNames, FormerName{Name: formerName, NotificationEmail: notificationEmail, LastChecked: time.Now()})
+		if err := db.SaveFormerName(FormerName{Name: formerName, NotificationEmail: notificationEmail, LastChecked: time.Now(), Status: status}); err != nil {
+			e.Logger.Fatal(err)
+		}
+		formerNames, _ := db.GetFormerNames()
 		component := index(formerNames, nil, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
@@ -249,12 +276,16 @@ func main() {
 		emails := strings.Split(c.FormValue("emails"), ",")
 		formerName := c.FormValue("name")
 
-		emailClient := EmailClient("rustydoggobytes@gmail.com", "fkqa dugm wjgs brpa")
 		emailClient.NotifyUserFormerNameIsAvailable(emails, formerName)
 
+		formerNames, _ := db.GetFormerNames()
 		component := index(formerNames, nil, nil)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
+	if ssl == "ssl" {
+		e.Logger.Fatal(e.StartAutoTLS("127.0.0.1:1324"))
+	} else {
+		e.Logger.Fatal(e.Start("127.0.0.1:1324"))
+	}
 }
