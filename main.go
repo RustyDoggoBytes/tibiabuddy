@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/crypto/acme/autocert"
@@ -155,7 +157,7 @@ func getNewStatus(name string, c *CharacterSearch) FormerNameStatus {
 	return unknown
 }
 
-func runBackground(db *repositoryClient, t *TibiaDataApi) {
+func runBackground(db *repositoryClient, t *TibiaDataApi, e *emailClient) {
 	fmt.Println("running background")
 	for {
 		fmt.Println("started...")
@@ -177,6 +179,9 @@ func runBackground(db *repositoryClient, t *TibiaDataApi) {
 			newStatus := getNewStatus(name.Name, char)
 			fmt.Printf("checked name %s old_status=%s new_status=%s\n", name.Name, oldStatus, newStatus)
 			if oldStatus != newStatus {
+				if newStatus == available {
+					e.NotifyUserFormerNameIsAvailable(strings.Split(name.NotificationEmail, ","), name.Name)
+				}
 				now := time.Now()
 				name.LastUpdatedStatus = &now
 			}
@@ -193,28 +198,33 @@ func runBackground(db *repositoryClient, t *TibiaDataApi) {
 }
 
 func main() {
-	ssl := ""
+	err := godotenv.Load()
+	if err != nil {
+		if err := godotenv.Load("/root/apps/.tibiabuddy.env"); err != nil {
+			panic("Error loading .env file")
+		}
+	}
 
 	t := TibiaDataApi{
 		Url: "https://api.tibiadata.com",
 	}
 
-	emailClient := EmailClient("rustydoggobytes@gmail.com", "fkqa dugm wjgs brpa")
+	emailClient := EmailClient(os.Getenv("email"), os.Getenv("email_password"))
 	db, err := RepositoryClient("tibiabuddy.db")
 
 	if err != nil {
 		panic(err)
 	}
 
-	go runBackground(db, &t)
+	go runBackground(db, &t, &emailClient)
 
 	e := echo.New()
 	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist("tibiabuddy.rustydoggobytes.com")
 	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
 	e.Use(middleware.BasicAuth(func(username, password string, c echo.Context) (bool, error) {
 		// Be careful to use constant time comparison to prevent timing attacks
-		if subtle.ConstantTimeCompare([]byte(username), []byte("rusty")) == 1 &&
-			subtle.ConstantTimeCompare([]byte(password), []byte("$umm3R")) == 1 {
+		if subtle.ConstantTimeCompare([]byte(username), []byte(os.Getenv("username"))) == 1 &&
+			subtle.ConstantTimeCompare([]byte(password), []byte(os.Getenv("password"))) == 1 {
 			return true, nil
 		}
 		return false, nil
@@ -283,9 +293,5 @@ func main() {
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	if ssl == "ssl" {
-		e.Logger.Fatal(e.StartAutoTLS("127.0.0.1:1324"))
-	} else {
-		e.Logger.Fatal(e.Start("127.0.0.1:1324"))
-	}
+	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
 }
