@@ -28,3 +28,4 @@ tmp/
 *.db
 tibiabuddy*
 *.env
+sqlc/
