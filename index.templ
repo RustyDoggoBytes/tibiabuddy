@@ -11,22 +11,34 @@ templ layout(contents templ.Component) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css"/>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
 			<script src="https://unpkg.com/htmx.org@1.9.9" integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX" crossorigin="anonymous"></script>
 			<title>Tibia Buddy</title>
 		</head>
 		<body hx-boost="true">
-			@contents
+			<header class="container-fluid">
+				<nav>
+					<ul>
+						<li><strong>Tibia Buddy</strong></li>
+					</ul>
+					<ul>
+						<li><a href="/signout">Logout</a></li>
+					</ul>
+				</nav>
+			</header>
+			<main class="container">
+				@contents
+			</main>
 		</body>
 	</html>
 }
 
 templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err error) {
-	<main class="container">
+	<div>
 		if err != nil {
 			<p style="color: red;">{ err.Error() }</p>
 		}
-		<h1>Former Name</h1>
+		<h2>Former Name</h2>
 		<form method="post" action="/former-name/search" hx-push-url="false">
 			<input type="search" name="former-name" role="search" placeholder="Search for former name"/>
 			<button type="submit">Search</button>
@@ -92,22 +104,25 @@ templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err e
 						<a
 							href="#"
 							role="button"
-							hx-delete={ templ.EscapeString("/former-names/" + followingName.Name) }
+							hx-delete={ templ.EscapeString("/former-names/" +
+					followingName.Name) }
 							hx-target="body"
 						>Remove</a>
 					</td>
 				</tr>
 			}
 		</table>
-		<details>
-			<summary>Email Test</summary>
-			<form method="post" action="/send-email" hx-push-url="false">
-				<input type="text" name="emails" placeholder="email1@gmail.com,email2@gmail.com"/>
-				<input type="text" name="name" placeholder="Aragorn"/>
-				<button type="submit">Send Test Email</button>
-			</form>
-		</details>
-	</main>
+		<article style="margin-top: 100px;">
+			<details>
+				<summary>Email Test</summary>
+				<form method=" post" action="/send-email" hx-push-url="false">
+					<input type="text" name="emails" placeholder="email1@gmail.com,email2@gmail.com"/>
+					<input type="text" name="name" placeholder="Aragorn"/>
+					<button type="submit">Send Test Email</button>
+				</form>
+			</details>
+		</article>
+	</div>
 }
 
 templ signUp(errorMsg *string) {
@@ -131,6 +146,7 @@ templ signIn(errorMsg *string) {
 		<form method="POST" action="/signin">
 			<input type="text" name="email" placeholder="email@email.com"/>
 			<input type="password" name="password" placeholder="password"/>
+			<p>No Account? <a href="/signup">Sign up here</a>.</p>
 			<button>Sign In</button>
 			if errorMsg != nil {
 				<p>{ *errorMsg } </p>

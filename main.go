@@ -107,6 +107,10 @@ func main() {
 	e.GET("/signin", SignInPage)
 	e.POST("/signin", authService.SignIn)
 
+	e.GET("/signout", func(c echo.Context) error {
+		return c.Redirect(302, "/signin")
+	})
+
 	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
 }
 
@@ -124,15 +128,19 @@ func (a *AuthService) SignUp(c echo.Context) error {
 	if password1 != password2 {
 		errorMsg = "password do not match"
 	} else {
-		user, err := a.signUp(email, password1)
+		_, err := a.signUp(email, password1)
 		if err != nil {
 			errorMsg = err.Error()
 		}
-		errorMsg = fmt.Sprintf("Success %d", user.ID)
 	}
 
-	component := layout(signUp(&errorMsg))
-	return component.Render(c.Request().Context(), c.Response())
+	if errorMsg != "" {
+		component := layout(signUp(&errorMsg))
+		return component.Render(c.Request().Context(), c.Response())
+	}
+
+	return c.Redirect(302, "/signin")
+
 }
 
 func SignInPage(c echo.Context) error {
@@ -145,11 +153,11 @@ func (a *AuthService) SignIn(c echo.Context) error {
 	password := c.FormValue("password")
 
 	_, err := a.signIn(email, password)
-	var errorMsg = "success!"
 	if err != nil {
-		errorMsg = err.Error()
+		var errorMsg = err.Error()
+		component := layout(signIn(&errorMsg))
+		return component.Render(c.Request().Context(), c.Response())
 	}
 
-	component := layout(signIn(&errorMsg))
-	return component.Render(c.Request().Context(), c.Response())
+	return c.Redirect(302, "/")
 }
