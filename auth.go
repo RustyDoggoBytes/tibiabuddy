@@ -13,6 +13,8 @@ import (
 //go:embed schema.sql
 var ddl string
 
+type UserSession = string
+
 type AuthService struct {
 	Ctx context.Context
 	Db  *sqlc.Queries

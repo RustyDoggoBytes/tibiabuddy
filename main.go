@@ -3,11 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
+	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -27,6 +30,7 @@ func main() {
 	emailClient := EmailClient(os.Getenv("email"), os.Getenv("email_password"))
 	db, err := RepositoryClient("tibiabuddy.db")
 	authService := NewAuthService(db.Db)
+	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("session_store_secret")))
 
 	if err != nil {
 		panic(err)
@@ -35,6 +39,23 @@ func main() {
 	go runBackground(db, &t, &emailClient)
 
 	e := echo.New()
+
+	e.Use(session.Middleware(cookieStore))
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			fmt.Println("middleware")
+			if c.Request().URL.Path != "/signin" && c.Request().URL.Path == "/signup" {
+				sess, _ := session.Get("session", c)
+				if sess.Values["user_id"] == nil {
+					fmt.Println("no id. redirecting")
+					return c.Redirect(http.StatusFound, "/signin")
+				}
+			}
+
+			return next(c)
+		}
+	})
+
 	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist("tibiabuddy.rustydoggobytes.com")
 	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
 
@@ -56,6 +77,7 @@ func main() {
 	})
 
 	e.GET("/", func(c echo.Context) error {
+		fmt.Println("index")
 		formerNames, _ := db.GetFormerNames()
 		component := layout(index(formerNames, nil, nil))
 		return component.Render(c.Request().Context(), c.Response())
@@ -107,9 +129,7 @@ func main() {
 	e.GET("/signin", SignInPage)
 	e.POST("/signin", authService.SignIn)
 
-	e.GET("/signout", func(c echo.Context) error {
-		return c.Redirect(302, "/signin")
-	})
+	e.GET("/signout", authService.SignOut)
 
 	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
 }
@@ -139,7 +159,7 @@ func (a *AuthService) SignUp(c echo.Context) error {
 		return component.Render(c.Request().Context(), c.Response())
 	}
 
-	return c.Redirect(302, "/signin")
+	return c.Redirect(http.StatusFound, "/signin")
 
 }
 
@@ -152,12 +172,32 @@ func (a *AuthService) SignIn(c echo.Context) error {
 	email := c.FormValue("email")
 	password := c.FormValue("password")
 
-	_, err := a.signIn(email, password)
+	user, err := a.signIn(email, password)
 	if err != nil {
 		var errorMsg = err.Error()
 		component := layout(signIn(&errorMsg))
 		return component.Render(c.Request().Context(), c.Response())
 	}
 
-	return c.Redirect(302, "/")
+	fmt.Println(user.ID)
+
+	sess, _ := session.Get("session", c)
+	sess.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7,
+		HttpOnly: true,
+	}
+	sess.Values["user_id"] = user.ID
+	sess.Save(c.Request(), c.Response())
+	fmt.Println(sess)
+
+	return c.Redirect(http.StatusFound, "/")
+}
+
+func (a *AuthService) SignOut(c echo.Context) error {
+	sess, _ := session.Get("session", c)
+	sess.Options.MaxAge = -1
+	sess.Save(c.Request(), c.Response())
+
+	return c.Redirect(http.StatusFound, "/signin")
 }
