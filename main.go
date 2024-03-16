@@ -12,7 +12,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -23,41 +22,26 @@ func main() {
 		}
 	}
 
-	t := TibiaDataApi{
-		Url: "https://api.tibiadata.com",
-	}
-
-	emailClient := EmailClient(os.Getenv("email"), os.Getenv("email_password"))
 	db, err := RepositoryClient("tibiabuddy.db")
-	authService := NewAuthService(db.Db)
-	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("session_store_secret")))
-
 	if err != nil {
 		panic(err)
 	}
 
+	emailClient := EmailClient(os.Getenv("email"), os.Getenv("email_password"))
+	authService := NewAuthService(db.Db)
+	authService.signUp(os.Getenv("username"), os.Getenv("password"))
+
+	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("session_store_secret")))
+
+	t := TibiaDataApi{
+		Url: "https://api.tibiadata.com",
+	}
 	go runBackground(db, &t, &emailClient)
 
 	e := echo.New()
 
 	e.Use(session.Middleware(cookieStore))
-	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			fmt.Println("middleware")
-			if c.Request().URL.Path != "/signin" && c.Request().URL.Path == "/signup" {
-				sess, _ := session.Get("session", c)
-				if sess.Values["user_id"] == nil {
-					fmt.Println("no id. redirecting")
-					return c.Redirect(http.StatusFound, "/signin")
-				}
-			}
-
-			return next(c)
-		}
-	})
-
-	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist("tibiabuddy.rustydoggobytes.com")
-	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
+	e.Use(authService.AuthMiddleware)
 
 	e.POST("/former-name/search", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
@@ -72,14 +56,14 @@ func main() {
 		}
 
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil))
+		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
 	e.GET("/", func(c echo.Context) error {
 		fmt.Println("index")
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil))
+		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
@@ -94,7 +78,7 @@ func main() {
 		}
 
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil))
+		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
@@ -108,7 +92,7 @@ func main() {
 			e.Logger.Fatal(err)
 		}
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil))
+		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
@@ -119,12 +103,12 @@ func main() {
 		emailClient.NotifyUserFormerNameIsAvailable(emails, formerName)
 
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil))
+		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	e.GET("/signup", SignUpPage)
-	e.POST("/signup", authService.SignUp)
+	// e.GET("/signup", SignUpPage)
+	// e.POST("/signup", authService.SignUp)
 
 	e.GET("/signin", SignInPage)
 	e.POST("/signin", authService.SignIn)
@@ -135,7 +119,7 @@ func main() {
 }
 
 func SignUpPage(c echo.Context) error {
-	component := layout(signUp(nil))
+	component := layout(signUp(nil), false)
 	return component.Render(c.Request().Context(), c.Response())
 }
 
@@ -155,7 +139,7 @@ func (a *AuthService) SignUp(c echo.Context) error {
 	}
 
 	if errorMsg != "" {
-		component := layout(signUp(&errorMsg))
+		component := layout(signUp(&errorMsg), false)
 		return component.Render(c.Request().Context(), c.Response())
 	}
 
@@ -164,7 +148,7 @@ func (a *AuthService) SignUp(c echo.Context) error {
 }
 
 func SignInPage(c echo.Context) error {
-	component := layout(signIn(nil))
+	component := layout(signIn(nil), false)
 	return component.Render(c.Request().Context(), c.Response())
 }
 
@@ -175,11 +159,9 @@ func (a *AuthService) SignIn(c echo.Context) error {
 	user, err := a.signIn(email, password)
 	if err != nil {
 		var errorMsg = err.Error()
-		component := layout(signIn(&errorMsg))
+		component := layout(signIn(&errorMsg), false)
 		return component.Render(c.Request().Context(), c.Response())
 	}
-
-	fmt.Println(user.ID)
 
 	sess, _ := session.Get("session", c)
 	sess.Options = &sessions.Options{
@@ -188,8 +170,8 @@ func (a *AuthService) SignIn(c echo.Context) error {
 		HttpOnly: true,
 	}
 	sess.Values["user_id"] = user.ID
+
 	sess.Save(c.Request(), c.Response())
-	fmt.Println(sess)
 
 	return c.Redirect(http.StatusFound, "/")
 }
@@ -200,4 +182,20 @@ func (a *AuthService) SignOut(c echo.Context) error {
 	sess.Save(c.Request(), c.Response())
 
 	return c.Redirect(http.StatusFound, "/signin")
+}
+
+func (a *AuthService) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if c.Request().URL.Path == "/signin" || c.Request().URL.Path == "/signup" {
+			return next(c)
+		}
+
+		sess, _ := session.Get("session", c)
+		if sess.Values["user_id"] == nil {
+			fmt.Println("no id. redirecting")
+			return c.Redirect(http.StatusFound, "/signin")
+		}
+
+		return next(c)
+	}
 }

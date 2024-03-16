@@ -1,156 +1,158 @@
 package main
 
 import (
-	"strings"
-	"time"
+"strings"
+"time"
 )
 
-templ layout(contents templ.Component) {
-	<!DOCTYPE html>
-	<html lang="en">
-		<head>
-			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
-			<script src="https://unpkg.com/htmx.org@1.9.9" integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX" crossorigin="anonymous"></script>
-			<title>Tibia Buddy</title>
-		</head>
-		<body hx-boost="true">
-			<header class="container-fluid">
-				<nav>
-					<ul>
-						<li><strong>Tibia Buddy</strong></li>
-					</ul>
-					<ul>
-						<li><a href="/signout">Logout</a></li>
-					</ul>
-				</nav>
-			</header>
-			<main class="container">
-				@contents
-			</main>
-		</body>
-	</html>
+templ layout(contents templ.Component, isLoggedIn bool) {
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+	<script src="https://unpkg.com/htmx.org@1.9.9"
+		integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX"
+		crossorigin="anonymous"></script>
+	<title>Tibia Buddy</title>
+</head>
+
+<body hx-boost="true">
+	<header class="container-fluid">
+		<nav>
+			<ul>
+				<li><strong>Tibia Buddy</strong></li>
+			</ul>
+			if isLoggedIn {
+			<ul>
+				<li><a href="/signout">Logout</a></li>
+			</ul>
+			}
+		</nav>
+	</header>
+	<main class="container">
+		@contents
+	</main>
+</body>
+
+</html>
 }
 
 templ index(followingNames []FormerName, searchCharacter *CharacterSearch, err error) {
-	<div>
-		if err != nil {
-			<p style="color: red;">{ err.Error() }</p>
-		}
-		<h2>Former Name</h2>
-		<form method="post" action="/former-name/search" hx-push-url="false">
-			<input type="search" name="former-name" role="search" placeholder="Search for former name"/>
-			<button type="submit">Search</button>
-		</form>
-		if searchCharacter != nil {
-			<article>
-				if searchCharacter.Error != nil {
-					<p>{ searchCharacter.Error.Error() }</p>
-				} else {
-					<h3>{ searchCharacter.NameInput }</h3>
-					<table>
-						<tr>
-							<td>Name</td>
-							<td>{ searchCharacter.Name }</td>
-						</tr>
-						<tr>
-							<td>Former Names</td>
-							<td>{ strings.Join(searchCharacter.FormerNames, ", ") }</td>
-						</tr>
-						<tr>
-							<td>World</td>
-							<td>{ searchCharacter.World }</td>
-						</tr>
-					</table>
-					<footer>
-						<form method="post" action="/former-names" hx-push-url="false">
-							<input type="hidden" name="former-name" value={ searchCharacter.NameInput }/>
-							<label for="notification-email">
-								Notification Email
-								<input type="email" name="notification-email"/>
-							</label>
-							<button type="submit">Start Tracking</button>
-						</form>
-					</footer>
-				}
-			</article>
-		}
-		<table role="grid">
-			<thead>
-				<tr>
-					<td>Name</td>
-					<td>Notification Email</td>
-					<td>Last Checked</td>
-					<td>Last Updated Status</td>
-					<td>Status</td>
-					<td></td>
-				</tr>
-			</thead>
-			for _, followingName := range(followingNames) {
-				<tr>
-					<td>{ followingName.Name }</td>
-					<td>{ followingName.NotificationEmail }</td>
-					<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
-					if followingName.LastUpdatedStatus != nil {
-						<td>{ followingName.LastUpdatedStatus.Format(time.RFC3339) } </td>
-					} else {
-						<td></td>
-					}
-					<td>
-						{ followingName.Status.String() }
-					</td>
-					<td>
-						<a
-							href="#"
-							role="button"
-							hx-delete={ templ.EscapeString("/former-names/" +
-					followingName.Name) }
-							hx-target="body"
-						>Remove</a>
-					</td>
-				</tr>
-			}
+<div>
+	if err != nil {
+	<p style="color: red;">{ err.Error() }</p>
+	}
+	<h2>Former Name</h2>
+	<form method="post" action="/former-name/search" hx-push-url="false">
+		<input type="search" name="former-name" role="search" placeholder="Search for former name" />
+		<button type="submit">Search</button>
+	</form>
+	if searchCharacter != nil {
+	<article>
+		if searchCharacter.Error != nil {
+		<p>{ searchCharacter.Error.Error() }</p>
+		} else {
+		<h3>{ searchCharacter.NameInput }</h3>
+		<table>
+			<tr>
+				<td>Name</td>
+				<td>{ searchCharacter.Name }</td>
+			</tr>
+			<tr>
+				<td>Former Names</td>
+				<td>{ strings.Join(searchCharacter.FormerNames, ", ") }</td>
+			</tr>
+			<tr>
+				<td>World</td>
+				<td>{ searchCharacter.World }</td>
+			</tr>
 		</table>
-		<article style="margin-top: 100px;">
-			<details>
-				<summary>Email Test</summary>
-				<form method=" post" action="/send-email" hx-push-url="false">
-					<input type="text" name="emails" placeholder="email1@gmail.com,email2@gmail.com"/>
-					<input type="text" name="name" placeholder="Aragorn"/>
-					<button type="submit">Send Test Email</button>
-				</form>
-			</details>
-		</article>
-	</div>
+		<footer>
+			<form method="post" action="/former-names" hx-push-url="false">
+				<input type="hidden" name="former-name" value={ searchCharacter.NameInput } />
+				<label for="notification-email">
+					Notification Email
+					<input type="email" name="notification-email" />
+				</label>
+				<button type="submit">Start Tracking</button>
+			</form>
+		</footer>
+		}
+	</article>
+	}
+	<table role="grid">
+		<thead>
+			<tr>
+				<td>Name</td>
+				<td>Notification Email</td>
+				<td>Last Checked</td>
+				<td>Last Updated Status</td>
+				<td>Status</td>
+				<td></td>
+			</tr>
+		</thead>
+		for _, followingName := range(followingNames) {
+		<tr>
+			<td>{ followingName.Name }</td>
+			<td>{ followingName.NotificationEmail }</td>
+			<td>{ followingName.LastChecked.Format(time.RFC3339) }</td>
+			if followingName.LastUpdatedStatus != nil {
+			<td>{ followingName.LastUpdatedStatus.Format(time.RFC3339) } </td>
+			} else {
+			<td></td>
+			}
+			<td>
+				{ followingName.Status.String() }
+			</td>
+			<td>
+				<a href="#" role="button" hx-delete={ templ.EscapeString("/former-names/" +
+					followingName.Name) } hx-target="body">Remove</a>
+			</td>
+		</tr>
+		}
+	</table>
+	<article style="margin-top: 100px;">
+		<details>
+			<summary>Email Test</summary>
+			<form method=" post" action="/send-email" hx-push-url="false">
+				<input type="text" name="emails" placeholder="email1@gmail.com,email2@gmail.com" />
+				<input type="text" name="name" placeholder="Aragorn" />
+				<button type="submit">Send Test Email</button>
+			</form>
+		</details>
+	</article>
+</div>
 }
 
 templ signUp(errorMsg *string) {
-	<article>
-		<h1>Sign Up</h1>
-		<form method="POST" action="/signup">
-			<input type="text" name="email" placeholder="email@email.com"/>
-			<input type="password" name="password1" placeholder="password"/>
-			<input type="password" name="password2" placeholder="confirm password"/>
-			<button>Sign up</button>
-			if errorMsg != nil {
-				<p>{ *errorMsg }</p>
-			}
-		</form>
-	</article>
+<article>
+	<h1>Sign Up</h1>
+	<form method="POST" action="/signup">
+		<input type="text" name="email" placeholder="email@email.com" />
+		<input type="password" name="password1" placeholder="password" />
+		<input type="password" name="password2" placeholder="confirm password" />
+		<button>Sign up</button>
+		if errorMsg != nil {
+		<p>{ *errorMsg }</p>
+		}
+	</form>
+</article>
 }
 
 templ signIn(errorMsg *string) {
-	<article>
-		<h1>Sign In</h1>
-		<form method="POST" action="/signin">
-			<input type="text" name="email" placeholder="email@email.com"/>
-			<input type="password" name="password" placeholder="password"/>
-			<p>No Account? <a href="/signup">Sign up here</a>.</p>
-			<button>Sign In</button>
-			if errorMsg != nil {
-				<p>{ *errorMsg } </p>
-			}
-		</form>
-	</article>
+<article>
+	<h1>Sign In</h1>
+	<form method="POST" action="/signin">
+		<input type="text" name="email" placeholder="email@email.com" />
+		<input type="password" name="password" placeholder="password" />
+		//<p>No Account? <a href="/signup">Sign up here</a>.</p>
+		<button>Sign In</button>
+		if errorMsg != nil {
+		<p>{ *errorMsg } </p>
+		}
+	</form>
+</article>
 }
