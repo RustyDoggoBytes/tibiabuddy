@@ -1,8 +1,11 @@
 package main
 
 import (
+	"embed"
 	"errors"
 	"fmt"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 	"net/http"
 	"os"
 	"strings"
@@ -14,34 +17,38 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+//go:embed static/*
+var embeddedFiles embed.FS
+
+var contentHandler = echo.WrapHandler(http.FileServer(http.FS(embeddedFiles)))
+var contentRewrite = middleware.Rewrite(map[string]string{"/*": "/static/$1"})
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		if err := godotenv.Load("/root/apps/.tibiabuddy.env"); err != nil {
-			panic("Error loading .env file")
-		}
+		log.Error("Error loading .env file")
 	}
 
-	db, err := RepositoryClient("tibiabuddy.db")
+	db, err := RepositoryClient("data/tibiabuddy.db")
 	if err != nil {
 		panic(err)
 	}
 
-	emailClient := EmailClient(os.Getenv("email"), os.Getenv("email_password"))
+	emailClient := EmailClient(os.Getenv("RESEND_API_TOKEN"), os.Getenv("EMAIL"))
 	authService := NewAuthService(db.Db)
-	authService.signUp(os.Getenv("username"), os.Getenv("password"))
-
-	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("session_store_secret")))
+	cookieStore := sessions.NewCookieStore([]byte(os.Getenv("SESSION_STORE_SECRET")))
 
 	t := TibiaDataApi{
-		Url: "https://api.tibiadata.com",
+		Url: "https://tibiadata.rustydoggobytes.com",
 	}
 	go runBackground(db, &t, &emailClient)
 
 	e := echo.New()
-
+	e.Static("/static", "static")
 	e.Use(session.Middleware(cookieStore))
 	e.Use(authService.AuthMiddleware)
+
+	e.GET("/*", contentHandler, contentRewrite)
 
 	e.POST("/former-name/search", func(c echo.Context) error {
 		formerName := c.FormValue("former-name")
@@ -56,12 +63,11 @@ func main() {
 		}
 
 		formerNames, _ := db.GetFormerNames()
-		component := layout(index(formerNames, nil, nil), true)
+		component := layout(index(formerNames, searchCharacter, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
 	e.GET("/", func(c echo.Context) error {
-		fmt.Println("index")
 		formerNames, _ := db.GetFormerNames()
 		component := layout(index(formerNames, nil, nil), true)
 		return component.Render(c.Request().Context(), c.Response())
@@ -107,15 +113,14 @@ func main() {
 		return component.Render(c.Request().Context(), c.Response())
 	})
 
-	// e.GET("/signup", SignUpPage)
-	// e.POST("/signup", authService.SignUp)
-
+	e.GET("/signup", SignUpPage)
 	e.GET("/signin", SignInPage)
-	e.POST("/signin", authService.SignIn)
 
+	e.POST("/signup", authService.SignUp)
+	e.POST("/signin", authService.SignIn)
 	e.GET("/signout", authService.SignOut)
 
-	e.Logger.Fatal(e.Start("127.0.0.1:1324"))
+	e.Logger.Fatal(e.Start("0.0.0.0:8080"))
 }
 
 func SignUpPage(c echo.Context) error {

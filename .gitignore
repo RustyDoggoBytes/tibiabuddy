@@ -24,8 +24,6 @@ go.work
 tmp/
 
 .vscode/
-*_templ.go
 *.db
-tibiabuddy*
-*.env
-sqlc/
+data/tibiabuddy.db
+.env
