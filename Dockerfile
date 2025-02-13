@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,8 @@ FROM scratch
 
 WORKDIR /app
 
-COPY --from=build /app/myapp .
+COPY --from=builder /etc/ssl/certs/ /etc/ssl/certs/
+COPY --from=builder /app/myapp .
 COPY static/ .
 
 EXPOSE 8080
