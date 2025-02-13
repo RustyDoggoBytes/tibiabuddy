@@ -27,3 +27,4 @@ tmp/
 *.db
 data/tibiabuddy.db
 .env
+.idea/
